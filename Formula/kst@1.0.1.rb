@@ -110,6 +110,13 @@ class KstAT101 < Formula
     virtualenv_install_with_resources
   end
 
+  def caveats
+    <<~EOS
+      kst has been renamed to iructl. Install iructl instead:
+        brew install iructl
+    EOS
+  end
+
   test do
     assert_match "kst, version #{version}", shell_output("#{bin}/kst --version")
     system "git", "config", "--global", "user.name", "Kandji Sync Toolkit"
