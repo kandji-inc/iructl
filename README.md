@@ -1,4 +1,7 @@
-# Iru Control
+<h1>
+  <img src=".github/assets/iructl.png" alt="" height="40" align="top" />
+  Iru Control
+</h1>
 
 `iructl` is a utility for managing resources via the Iru API.
 
