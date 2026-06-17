@@ -1,0 +1,35 @@
+name: Feature Request
+description: Create a request for a new feature or functionality
+title: "[Feature Request] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: "## Request new functionality for Iru Control"
+  - type: checkboxes
+    id: nodupes
+    attributes:
+      label: New Request Check
+      description: Search for [similar feature requests](../issues) before submitting
+      options:
+        - label: _I have searched the repo and confirm this is a new feature request_
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Please describe your feature request and the context in which it would be useful.
+      placeholder: |
+        I would like iructl to be able to...
+        So that I can...
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context or screenshots about the feature request here
+    validations:
+      required: false

@@ -1,0 +1,36 @@
+# Force bash since zsh isn't supported
+shell=bash
+# Follow source paths
+external-sources=true
+# Enforce using [[]] instead of [] for conditionals
+enable=require-double-brackets
+# Enforce ${} for all variables instead of just $
+enable=require-variable-braces
+# Ignore ShellCheck Parser errors since they are likely zsh related
+disable=SC1009
+# Ignore check for 'do' after 'for' loop starts
+disable=SC1058
+# Ignore parser error that returns 'Unexpected ..'
+disable=SC1072
+# Skip parsing checks (covered by beautysh)
+disable=SC1073
+# Ignore error when accessing zparseopts element
+disable=SC1087
+# zsh builtin echo expands escape characters by default
+disable=SC2028
+# Quotes not needed to prevent word splitting
+disable=SC2046
+# Quoted vars aren't needed for comparison
+disable=SC2053
+# Array expansions can be unquoted
+disable=SC2068
+# Variables don't need to be quoted to avoid spliting and globbing
+disable=SC2086
+# var+=string valid for appending item to array
+disable=SC2179
+# Command expansion in array can be unquoted
+disable=SC2207
+# Ignore error using read in zsh for var def
+disable=SC2229
+# Ignore error when accessing var value using (P)
+disable=SC2296

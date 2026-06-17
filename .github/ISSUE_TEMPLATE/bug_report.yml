@@ -1,0 +1,88 @@
+name: Bug Report
+description: Create a report to help improve the product
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: "## Report issues with Iru Control"
+  - type: checkboxes
+    id: nodupes
+    attributes:
+      label: New Bug Check
+      description: Search for [similar bug reports](../issues) before submitting
+      options:
+        - label: _I have searched the repo and confirm this is a new bug report_
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Please provide a clear and concise description of the issue
+      placeholder: |
+        When I run...
+        The result is...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: List the steps to reproduce the issue including any required setup or environment info.
+      placeholder: |
+        1. iructl profile new -n "Test Profile"
+        2. iructl profile sync --all
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What is the expected behavior?
+      placeholder: |
+        I would expect...
+    validations:
+      required: true
+  - type: textarea
+    id: response
+    attributes:
+      label: Actual Behavior
+      description: What is the actual behavior. Include the output of the `iructl` command containing the error/exception (redacting sensitive information).
+      render: python
+      placeholder: |
+        Traceback (most recent call last):
+          File "iructl", line 1, in <module>
+        ImportError: cannot import name 'iructl'
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: iructl Version
+      description: Output of `iructl --version`
+      placeholder: "iructl, version 1.0.1"
+    validations:
+      required: true
+  - type: textarea
+    id: osinfo
+    attributes:
+      label: Operating System Info
+      description: Operating system information (OS family, architecture, version, build, etc.)
+      render: bash
+      placeholder: |
+        OS:       macOS
+        Arch:     arm
+        Version:  14.4.1
+        Build:    23E224
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Info
+      description: Any additional info you want to provide such as logs, system info, screenshots, etc.
+    validations:
+      required: false

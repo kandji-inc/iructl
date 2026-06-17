@@ -1,0 +1,77 @@
+repos:
+  # --------------------------------- Python -----------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 22f0422809455ec89ffdcf5a00170ba816e42ddb  # frozen: v0.15.16
+    hooks:
+      - id: ruff
+        args: ["--fix", "--show-fixes", "--exit-non-zero-on-fix"]
+
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: c665864e22f27255a10d82e14f8ccea6843fd65e  # frozen: 0.11.19
+    hooks:
+      - id: uv-lock
+
+  # --------------------------------- Shell ------------------------------------
+  - repo: https://github.com/lovesegfault/beautysh
+    rev: 885128fe2600889194c69fa19326cf55a3462777  # frozen: v6.4.3
+    hooks:
+      - id: beautysh
+        args: ["--indent-size=4", "--force-function-style=fnpar"]
+        additional_dependencies:
+          # beautysh hasn't been updated since python 3.12 removed the default install of setuptools
+          - setuptools
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: ["--severity=warning"]
+
+  # -------------------------------- General -----------------------------------
+  - repo: https://github.com/codespell-project/codespell
+    rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # frozen: v2.4.2
+    hooks:
+      - id: codespell
+        args: ["--write-changes"]
+        additional_dependencies:
+          # In order to parse the pyproject.toml prior to python 3.11
+          - tomli
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: 68e8b45440415753fff70a312ece8da92ba85b4a # frozen: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--exclude-lines", '\${.*}', "--exclude-files", '.*pkg\.recipe|\.pre-commit-config.yaml|Formula/.*\.rb']
+
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: ad1b27d73581aa16cca06fc4a0761fc563ffe8e8  # frozen: v1.5.6
+    hooks:
+      - id: remove-tabs
+        exclude: ^(Makefile|debian/rules|.gitmodules|tests/resources/.*\.mobileconfig)(\.in)?$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=5120"] # 5 MB limit
+
+      - id: check-xml
+        types: ["file", "non-executable", "text"]
+        files: \.(recipe|plist|xml)$
+
+      - id: check-yaml
+
+      - id: check-toml
+
+      - id: debug-statements
+
+      - id: pretty-format-json
+        args: ["--autofix", "--indent=2", "--no-sort-keys"]
+
+      - id: check-json
+
+      - id: trailing-whitespace
+
+      - id: end-of-file-fixer

@@ -1,0 +1,20 @@
+name: Trigger Pull to Private Fork
+permissions:
+  contents: read
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+jobs:
+  trigger-pull:
+    if: github.event.pull_request.merged && (github.repository == 'kandji-inc/iructl') && !contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@7dae662b47efccf275f551a5df539bd020d3eb5b # v3.0.0
+        with:
+          token: ${{ secrets.INTERNAL_REPO_TOKEN }}
+          repository: ${{ secrets.INTERNAL_REPO }}
+          event-type: pr-merged-public-main
+          client-payload: '{"event": ${{ toJson(github.event) }}}'

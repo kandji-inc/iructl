@@ -1,0 +1,6 @@
+# .gitignore
+# This file contains a list of paths/patterns to ignore when committing to git.
+# For more information, see https://git-scm.com/docs/gitignore
+
+.DS_Store
+.env

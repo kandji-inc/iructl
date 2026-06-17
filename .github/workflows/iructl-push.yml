@@ -1,0 +1,292 @@
+name: iructl Push
+on:
+  workflow_call:
+    inputs:
+      debug:
+        description: "Enable debug log to console"
+        required: false
+        default: false
+        type: boolean
+      force:
+        description: "Force push to overwrite changes in Kandji"
+        required: false
+        default: true
+        type: boolean
+      clean:
+        description: "Delete profiles and scripts if missing from the GitHub repository"
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      iructl_tenant:
+        description: "Your Kandji tenant's API URL"
+        required: true
+      iructl_token:
+        description: "Your Kandji tenant's API token"
+        required: true
+      slack_webhook_url:
+        description: "Slack webhook URL for sending notifications"
+        required: false
+jobs:
+  push-to-kandji:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      IRUCTL_TENANT: ${{ secrets.iructl_tenant }}
+      IRUCTL_TOKEN: ${{ secrets.iructl_token }}
+      IRUCTL_REPORT: "/home/runner/.local/state/iructl/log/iructl_report.json"
+    steps:
+      - name: Clone Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.11.20"
+          enable-cache: true
+
+      - name: Install iructl
+        run: uv tool install --python 3.13 iructl
+
+      - name: Display iructl Version
+        run: iructl --version
+
+      - name: Configure iructl options
+        run: |
+          if [[ "${{ inputs.debug }}" == "true" ]]; then
+            echo "Debug logging enabled"
+            echo debug_opts="--debug --log -" >> $GITHUB_ENV
+          fi
+
+          declare -a includes=(
+            "--include" "conflict"
+            "--include" "new_local"
+            "--include" "updated_local"
+          )
+          declare -a options=()
+
+          if [[ "${{ inputs.force }}" == "true" ]]; then
+            echo "Force pull enabled, local updates will be overwritten"
+            options+=("--force")
+            includes+=("--include" "updated_remote")
+          fi
+
+          if [[ "${{ inputs.clean }}" == "true" ]]; then
+            echo "Clean option enabled, local profiles and scripts will be deleted if missing from Kandji"
+            options+=("--clean")
+            includes+=("--include" "new_remote")
+          fi
+
+          echo "includes=${includes[*]}" >> $GITHUB_ENV
+          echo "options=${options[*]}" >> $GITHUB_ENV
+
+      - name: Configure github-actions[bot] user
+        run : |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure .iructl marker file
+        run: |
+          if [ ! -f ".iructl" ]; then
+            echo "Creating .iructl marker file"
+            touch .iructl
+            git add .iructl
+            git commit -m "Add .iructl marker file"
+          fi
+
+      - name: Show Pending Profile Changes
+        run: iructl ${debug_opts} profile list ${includes[*]}
+
+      - name: Push Profiles to Kandji
+        run: iructl ${debug_opts} profile push --all ${options[*]}
+
+      - name: Check Profiles Report
+        id: profiles-report
+        run: |
+          echo "summary=$(jq '.[0].summary' $IRUCTL_REPORT)" >> $GITHUB_OUTPUT
+
+          # Set the message and color based on the status
+          case "$(jq -r '.[0].status' $IRUCTL_REPORT)" in
+            "success")
+              message="Custom profiles were updated in Kandji."
+              color="#36a64f"
+              ;;
+            "warning")
+              message="Warnings occurred while updating profiles in Kandji."
+              color="#f2c717"
+              ;;
+            "failed")
+              message="Errors occurred while updating profiles in Kandji."
+              color="#ed1f1f"
+              ;;
+            *)
+              message="An unknown status occrued while updating profiles in Kandji: $status"
+              color="#f2c717"
+              ;;
+          esac
+          echo "message=${message}" >> $GITHUB_OUTPUT
+          echo "color=${color}" >> $GITHUB_OUTPUT
+
+      - name: Send Profiles Result Slack Notification
+        if: ${{ steps.profiles-report.outputs.summary != '""' }}
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.slack_webhook_url }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{ steps.profiles-report.outputs.color }}",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "${{ steps.profiles-report.outputs.message }}"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "plain_text",
+                        "text": ${{ steps.profiles-report.outputs.summary }}
+                      }
+                    },
+                    {
+                      "type": "context",
+                      "elements": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Action Log>"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Show Pending Script Changes
+        run: iructl ${debug_opts} script list ${includes[*]}
+
+      - name: Push Scripts to Kandji
+        run: iructl ${debug_opts} script push --all ${options[*]}
+
+      - name: Check Scripts Report
+        id: scripts-report
+        run: |
+          echo "summary=$(jq '.[0].summary' $IRUCTL_REPORT)" >> $GITHUB_OUTPUT
+
+          # Set the message and color based on the status
+          case "$(jq -r '.[0].status' $IRUCTL_REPORT)" in
+            "success")
+              message="Custom scripts were updated in Kandji."
+              color="#36a64f"
+              ;;
+            "warning")
+              message="Warnings occurred while updating scripts in Kandji."
+              color="#f2c717"
+              ;;
+            "failed")
+              message="Errors occurred while updating scripts in Kandji."
+              color="#ed1f1f"
+              ;;
+            *)
+              message="An unknown status occrued while updating scripts in Kandji: $status"
+              color="#f2c717"
+              ;;
+          esac
+          echo "message=${message}" >> $GITHUB_OUTPUT
+          echo "color=${color}" >> $GITHUB_OUTPUT
+
+      - name: Send Scripts Result Slack Notification
+        if: ${{ steps.scripts-report.outputs.summary != '""' }}
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.slack_webhook_url }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{ steps.scripts-report.outputs.color }}",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "${{ steps.scripts-report.outputs.message }}"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "plain_text",
+                        "text": ${{ steps.scripts-report.outputs.summary }}
+                      }
+                    },
+                    {
+                      "type": "context",
+                      "elements": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Action Log>"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+
+      - name: Write Changes to the GitHub Repository
+        run: git push
+
+      - name: Send Slack Notification on Job Failure
+        if: ${{ failure() }}
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.slack_webhook_url }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "#ed1f1f",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "iructl Push Workflow Error"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Steps failed while executing the workflow. Please check the link for more details."
+                      }
+                    },
+                    {
+                      "type": "context",
+                      "elements": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Action Log>"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
