@@ -67,7 +67,6 @@ def nearest_existing_dir(cd_path: Path) -> Path:
     existing_dir = next((p for p in (cd_path, *cd_path.parents) if p.is_dir()), None)
     if existing_dir is None or existing_dir == Path(existing_dir.anchor):
         msg = f"Failed to locate an existing parent directory for {cd_path}"
-        console.error(msg)
         raise InvalidRepositoryError(msg)
     return existing_dir
 
@@ -140,7 +139,6 @@ def locate_repo_root(*, cd_path: Path = Path(".")) -> Path:
         f"The directory does not appear to be a {APP_BRANDING} repository. If it should be, "
         f'please make sure a "{ROOT_MARKER}" file exists in the repository.'
     )
-    console.error(msg)
     raise InvalidRepositoryError(msg)
 
 

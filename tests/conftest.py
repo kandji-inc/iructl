@@ -111,6 +111,18 @@ def disable_typer_force_terminal():
 
 
 @pytest.fixture(autouse=True, scope="session")
+def disable_forced_terminal_color():
+    """Clear color-forcing env vars so Rich never ANSI-colorizes --format json output.
+
+    Otherwise a host/CI that sets these makes json.loads choke on escape codes.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv("FORCE_COLOR", raising=False)
+        mp.delenv("TTY_COMPATIBLE", raising=False)
+        yield
+
+
+@pytest.fixture(autouse=True, scope="session")
 def fixed_terminal_width():
     """Pin the rendered console width so output is deterministic across machines.
 

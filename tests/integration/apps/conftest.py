@@ -8,6 +8,8 @@ from tests.fixtures.apps import (
     apps_repo_obj,
     custom_app_factory,
     patch_apps_endpoints,
+    stub_installer_download,
+    unchanged_app,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "apps_repo_obj",
     "custom_app_factory",
     "patch_apps_endpoints",
+    "stub_installer_download",
+    "unchanged_app",
 ]

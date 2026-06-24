@@ -236,19 +236,25 @@ def test_get_remote_profiles_runs_on_missing(monkeypatch, config, profiles_respo
     assert all(getattr(result_repo[profile.id].info, param) for param in PROFILE_RUNS_ON_PARAMS)
 
 
-def test_get_remote_profiles_connection_error(monkeypatch, caplog, config):
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(requests.ConnectionError("connection reset"), id="connection-error"),
+        pytest.param(requests.ReadTimeout("read timed out"), id="read-timeout"),
+    ],
+)
+def test_get_remote_profiles_transport_error_exits_cleanly(monkeypatch, caplog, config, error):
+    """A transport failure while listing is a clean message + non-zero exit, not a raw traceback."""
+
     def fake_list(self):
-        raise requests.exceptions.ConnectionError("Connection Error")
+        raise error
 
     monkeypatch.setattr("iructl.api.profiles.CustomProfilesResource.list", fake_list)
-    with pytest.raises(typer.Exit):
-        get_remote_members(
-            config=config,
-            member_type=CustomProfile,
-            all_members=True,
-        )
+    with pytest.raises(typer.Exit) as exc:
+        get_remote_members(config=config, member_type=CustomProfile, all_members=True)
 
-    assert "An error occurred while fetching: Connection Error" in caplog.text
+    assert exc.value.exit_code == 1
+    assert f"Could not connect to {config.url}. Check your network connection and try again." in caplog.text
 
 
 def test_get_remote_profiles_skips_invalid_member(monkeypatch, caplog, config, profiles_response):

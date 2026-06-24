@@ -135,6 +135,20 @@ class TestApiClient:
         assert "HTTP error occurred: 400" in error_messages
         assert "Response content: genuine failure" in error_messages
 
+    def test_transport_error_logged_and_reraised(self, fake_client, monkeypatch, caplog):
+        """A read timeout (a transport failure that is not a ConnectionError) is logged and re-raised."""
+
+        def mock_request(self, *args, **kwargs):
+            raise requests.ReadTimeout("read timed out")
+
+        monkeypatch.setattr("requests.sessions.Session.request", mock_request)
+        with caplog.at_level("DEBUG", logger="iructl.api.client"):
+            with pytest.raises(requests.ReadTimeout):
+                fake_client.get("/scripts")
+
+        error_messages = [r.message for r in caplog.records if r.levelno == logging.ERROR]
+        assert any("Connection error occurred" in message for message in error_messages)
+
 
 class TestDetectSource:
     """The source tag gains a -ci suffix whenever the CI env var is present."""

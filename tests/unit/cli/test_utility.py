@@ -58,6 +58,7 @@ NODE_A = "11111111-1111-1111-1111-111111111111"
 # duplicate-detection must match these as substrings rather than by exact equality.
 DUPLICATE_BODY_NODE_EXCLUSIVE = b'"Assignment node can only have one of this Library Item type."'
 DUPLICATE_BODY_ALREADY_ASSIGNED = b'"Library Item already exists in Assignment Node"'
+CONNECTION_MESSAGE = "Could not connect to the tenant. Check your network connection and try again."
 
 
 def _make_http_error(status_code: int, body: bytes) -> requests.HTTPError:
@@ -292,6 +293,17 @@ class TestApiConfigPrompt:
             assert user_prompted is False
         assert log_out in caplog.text
 
+    def test_raises_bad_parameter_when_ping_connection_fails(self, monkeypatch):
+        """A transport failure on the connectivity ping is a clean BadParameter, not a traceback."""
+
+        def fake_get_raises(*args, **kwargs):
+            raise requests.ConnectionError("connection reset by peer")
+
+        monkeypatch.setattr("requests.get", fake_get_raises)
+        expected = "Could not connect to https://test.api.iru.com. Check your network connection and try again."
+        with pytest.raises(typer.BadParameter, match=re.escape(expected)):
+            api_config_prompt("https://test.api.iru.com", "00000000-0000-0000-0000-000000000000", interactive=False)
+
 
 class TestValidateRepoPath:
     @pytest.mark.usefixtures("iructl_repo")
@@ -328,12 +340,24 @@ class TestValidateRepoPath:
         monkeypatch.chdir(legacy_repo)
         with caplog.at_level(logging.WARNING), pytest.raises(typer.Exit):
             validate_repo_path(repo=legacy_repo)
-        # The warning panel, the instruction, and the mv command are shown; the generic
+        # The warning, the instruction, and the full mv command are shown; the generic
         # "not a valid" error is not also emitted.
         assert "unmigrated kst repository" in caplog.text.lower()
         assert "To migrate, rename the marker file:" in caplog.text
-        assert f"mv {LEGACY_ROOT_MARKER}" in caplog.text
+        assert f"mv {LEGACY_ROOT_MARKER} {ROOT_MARKER}" in caplog.text
         assert "is not a valid" not in caplog.text
+
+    def test_migration_hint_shows_full_command_when_path_exceeds_console_width(
+        self, tmp_path: Path, caplog, monkeypatch
+    ):
+        legacy_repo = tmp_path / Path(*(["nested"] * 20)) / "legacy"
+        legacy_repo.mkdir(parents=True)
+        (legacy_repo / LEGACY_ROOT_MARKER).touch()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("COLUMNS", "80")
+        with caplog.at_level(logging.WARNING), pytest.raises(typer.Exit):
+            validate_repo_path(repo=legacy_repo)
+        assert f"legacy/{ROOT_MARKER}" in caplog.text
 
 
 class TestValidateOutputPath:
@@ -479,7 +503,7 @@ class TestClassifyAssignError:
                 id="400-json-string-unwrapped",
             ),
             pytest.param(_make_http_error(500, b"server error"), "failed", 500, "server error", id="500-failed"),
-            pytest.param(requests.ConnectionError("boom"), "failed", None, "ConnectionError", id="transport-failed"),
+            pytest.param(requests.ConnectionError("boom"), "failed", None, CONNECTION_MESSAGE, id="transport-failed"),
         ],
     )
     def test_maps_error_to_outcome(self, error, expected_status, expected_code, expected_message):
@@ -534,8 +558,26 @@ class TestHttpErrorDetail:
         error = requests.HTTPError("400 Client Error: Bad Request")
         assert _http_error_detail(error) == "400 Client Error: Bad Request"
 
-    def test_returns_str_for_non_http_error(self):
-        assert _http_error_detail(requests.ConnectionError("boom")) == "boom"
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(requests.ConnectionError("connection reset by peer"), id="connection-reset"),
+            pytest.param(requests.ConnectTimeout("connect timed out"), id="connect-timeout"),
+            pytest.param(requests.ReadTimeout("read timed out"), id="read-timeout"),
+        ],
+    )
+    def test_collapses_transport_error_to_connection_message(self, error):
+        assert _http_error_detail(error) == CONNECTION_MESSAGE
+
+    def test_transport_message_names_the_tenant_url(self):
+        error = requests.ConnectionError("connection reset by peer")
+        assert _http_error_detail(error, "https://acme.api.kandji.io") == (
+            "Could not connect to https://acme.api.kandji.io. Check your network connection and try again."
+        )
+
+    def test_returns_str_for_non_requests_error(self):
+        # A non-requests exception (e.g. an unexpected ValueError) is surfaced verbatim.
+        assert _http_error_detail(ValueError("boom")) == "boom"
 
 
 class TestReconcileBlueprints:
@@ -638,8 +680,8 @@ class TestReconcileBlueprints:
     @pytest.mark.parametrize(
         ("error", "expected_message"),
         [
-            pytest.param(requests.ConnectionError("connection refused"), "ConnectionError", id="connection-error"),
-            pytest.param(requests.ReadTimeout("read timed out"), "ReadTimeout", id="read-timeout"),
+            pytest.param(requests.ConnectionError("connection refused"), CONNECTION_MESSAGE, id="connection-error"),
+            pytest.param(requests.ReadTimeout("read timed out"), CONNECTION_MESSAGE, id="read-timeout"),
         ],
     )
     def test_reconcile_blueprints_classifies_resolver_request_errors(self, monkeypatch, error, expected_message):
@@ -1281,13 +1323,22 @@ class TestDoPushBlueprintBranches:
         ],
     )
     def test_do_push_blueprint_branches(
-        self, monkeypatch, action_type, change, member, resource, expected_result, expected_assigns, expected_statuses
+        self,
+        monkeypatch,
+        config,
+        action_type,
+        change,
+        member,
+        resource,
+        expected_result,
+        expected_assigns,
+        expected_statuses,
     ):
         monkeypatch.setattr(utility, "update_local_member", self._skip_local_member_write)
         operation = OperationType.SKIP if action_type is ActionType.SKIP else OperationType.PUSH
         action = PreparedAction(action=action_type, operation=operation, change=change, member=member)
 
-        response = do_push(config=None, local_repo={}, action=action, preview=True, blueprints=resource)
+        response = do_push(config=config, local_repo={}, action=action, preview=True, blueprints=resource)
 
         assert response.result is expected_result
         assert resource.assign_calls == expected_assigns
@@ -1301,22 +1352,23 @@ class TestDoPushErrorHandling:
             pytest.param(MissingAppInstallerError("Unable to locate the installer binary at /p/app.pkg"), id="missing"),
             pytest.param(InvalidAppError("The sha256 of /p/app.pkg does not match the info file"), id="sha-mismatch"),
             pytest.param(PayloadTransferError("Failed to upload file to S3: boom"), id="s3-upload"),
+            pytest.param(requests.ReadTimeout("read timed out"), id="transport"),
         ],
     )
-    def test_app_push_errors_become_failures_with_their_message(self, error, caplog):
-        """Each custom app push error is caught and reported, not raised as a traceback."""
+    def test_push_errors_become_failures_with_their_message(self, config, error, caplog):
+        """Each push error is caught and reported with its user-facing detail, not raised as a traceback."""
         member = FakeMember("li", raises=error)
         action = PreparedAction(
             action=ActionType.UPDATE, operation=OperationType.PUSH, change=ChangeType.UPDATE_REMOTE, member=member
         )
 
         with caplog.at_level(logging.ERROR):
-            response = do_push(config=None, local_repo={}, action=action)
+            response = do_push(config=config, local_repo={}, action=action)
 
         assert response.result is ResultType.FAILURE
         assert response.member is member
-        assert str(error) in caplog.text
-        # An S3 upload that failed partway is a failed transfer; validation errors moved nothing.
+        assert _http_error_detail(error, config.url) in caplog.text
+        # Only a partway S3 upload is a failed transfer; the transport and validation errors moved nothing.
         expected_transfer = PayloadTransfer.FAILED if isinstance(error, PayloadTransferError) else PayloadTransfer.NONE
         assert response.transfer is expected_transfer
 

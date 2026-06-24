@@ -5,6 +5,8 @@ from typer.testing import CliRunner
 
 from iructl import app
 from iructl._constants import ROOT_MARKER
+from iructl.repository import CustomProfile, Repository, RepositoryDirectory
+from tests.output import normalize_output
 
 runner = CliRunner()
 
@@ -39,3 +41,24 @@ def test_git_setting_gates_commits(iructl_repo_cd, commit_spy, cli_args, repo_co
     assert result.exit_code == 0
     assert commit_spy
     assert all(call["enabled"] == expect_enabled for call in commit_spy)
+
+
+def test_push_in_non_git_repo_reports_clean_error_not_traceback(tmp_path, monkeypatch):
+    """A push with git enabled in a non-git directory exits cleanly with guidance."""
+    repo = tmp_path / "repo"
+    (repo / RepositoryDirectory.PROFILES).mkdir(parents=True)
+    (repo / ROOT_MARKER).touch()
+
+    # Stub the remote fetch so the push reaches the pre-push commit without a network call.
+    monkeypatch.setattr(
+        "iructl._cli.member.defaults.get_remote_members",
+        lambda **_: (Repository[CustomProfile](), []),
+    )
+
+    result = runner.invoke(app, ["--repo", str(repo), "profile", "push", "--all"])
+
+    assert result.exit_code == 1
+    output = normalize_output(result.output)
+    assert "is not part of a valid Git repository" in output
+    assert "--no-git" in output
+    assert "Traceback" not in result.output

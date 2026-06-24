@@ -24,7 +24,6 @@ from pydantic import ValidationError
 from rich import box
 from rich.markup import escape
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.table import Table
 
 from iructl._cli.common import (
@@ -66,16 +65,18 @@ if TYPE_CHECKING:
 
 console = OutputConsole(logging.getLogger(__name__))
 
+_PING_TIMEOUT = (10, 30)  # (connect timeout, read timeout)
+
 
 def _warn_unmigrated_repo(error: UnmigratedRepositoryError) -> None:
-    """Render the migration warning as a panel, then the command as a code block below it."""
+    """Render the migration warning panel, then the rename command as plain text."""
     console.print_warning(
         Panel(
             error.warning, title="Unmigrated kst repository", title_align="left", border_style="warning", expand=False
         )
     )
     console.print_warning("To migrate, rename the marker file:")
-    console.print_warning(Syntax(error.command, "bash", background_color="default", word_wrap=True))
+    console.print_warning(f"  {escape(error.command)}")
 
 
 # --- Utility functions ---
@@ -125,7 +126,12 @@ def api_config_prompt(tenant_url: str | None, api_token: str | None, interactive
 
     # Ensure the URL is a valid Iru tenant API URL
     console.debug(f"Validating URL: {config.url}")
-    response = requests.get(urljoin(config.url, "/app/v1/ping"), params={"source": SOURCE})
+    try:
+        response = requests.get(urljoin(config.url, "/app/v1/ping"), params={"source": SOURCE}, timeout=_PING_TIMEOUT)
+    except requests.RequestException as error:
+        msg = _http_error_detail(error, config.url)
+        console.error(msg)
+        raise typer.BadParameter(msg)
     if not response.ok:
         msg = f"Unable to connect to ({config.url}). Please check the URL then try again."
         console.error(msg)
@@ -687,8 +693,8 @@ def get_remote_members[MemberType: MemberBase](
         console.debug(f"Fetching members from the remote API at {config.url}")
         members = member_type.list_remote(config=config).results
         console.debug(f"Fetched {len(members)} members")
-    except (requests.ConnectionError, requests.HTTPError, ValidationError) as error:
-        console.print_error(f"An error occurred while fetching: {_http_error_detail(error)}")
+    except (requests.RequestException, ValidationError) as error:
+        console.print_error(f"An error occurred while fetching: {_http_error_detail(error, config.url)}")
         raise typer.Exit(code=1)
 
     if not all_members:
@@ -1202,23 +1208,27 @@ def _flatten_error_body(value: object) -> str:
     return str(value)
 
 
-def _http_error_detail(error: Exception) -> str:
+def _http_error_detail(error: Exception, url: str | None = None) -> str:
     """Return a user-facing detail, surfacing the API response body for HTTPErrors.
 
     A 401 short-circuits to a fixed message: the auth gateway returns an unparsable
-    body for invalid tokens, so the status code is the only reliable signal.
+    body for invalid tokens, so the status code is the only reliable signal. A
+    transport failure (connection reset, DNS, timeout) collapses to a connection
+    message naming the tenant.
     """
     response = getattr(error, "response", None)
-    if not (isinstance(error, requests.HTTPError) and response is not None):
-        return str(error)
-    if response.status_code == 401:
-        return "Invalid or expired API token"
-    message = response.text.strip()
-    with contextlib.suppress(ValueError):
-        flattened = _flatten_error_body(response.json()).strip()
-        if flattened:
-            message = flattened
-    return message.removesuffix(".")
+    if isinstance(error, requests.HTTPError) and response is not None:
+        if response.status_code == 401:
+            return "Invalid or expired API token"
+        message = response.text.strip()
+        with contextlib.suppress(ValueError):
+            flattened = _flatten_error_body(response.json()).strip()
+            if flattened:
+                message = flattened
+        return message.removesuffix(".")
+    if isinstance(error, requests.RequestException) and not isinstance(error, requests.HTTPError):
+        return f"Could not connect to {url or 'the tenant'}. Check your network connection and try again."
+    return str(error)
 
 
 # --- Blueprint Reconciliation ---
@@ -1267,11 +1277,12 @@ def _classify_assign_error(
             error_message=_normalize_error_message(response),
             blueprint_name=blueprint_name,
         )
+    error_message = _http_error_detail(error) if isinstance(error, requests.RequestException) else type(error).__name__
     return BlueprintActionOutcome(
         blueprint_id=blueprint_id,
         node_id=node_id,
         status="failed",
-        error_message=type(error).__name__,
+        error_message=error_message,
         blueprint_name=blueprint_name,
     )
 
@@ -1479,14 +1490,13 @@ def _push_action[MemberType: MemberBase](
             case ActionType.INVALID:
                 raise ValueError("A push action cannot be invalid.")
     except (
-        requests.HTTPError,
-        requests.ConnectionError,
+        requests.RequestException,
         PayloadTransferError,
         ValueError,
         InvalidRepositoryMemberError,
     ) as e:
         console.print_error(
-            f"Failed to {action.action} item in Iru {action.member.id}. {_http_error_detail(e)}",
+            f"Failed to {action.action} item in Iru {action.member.id}. {_http_error_detail(e, config.url)}",
             stderr=False,
         )
         transfer = PayloadTransfer.FAILED if isinstance(e, PayloadTransferError) else PayloadTransfer.NONE

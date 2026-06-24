@@ -15,10 +15,10 @@ import requests
 from ruamel.yaml import YAML
 
 from iructl._diff import ChangesDict, ChangeType
+from iructl._utils import content_suffixed_filename
 from iructl.api import CustomAppPayload, PayloadList
 from iructl.repository import (
     SUFFIX_MAP,
-    AppFile,
     AppInfoFile,
     CustomApp,
     InfoFormat,
@@ -27,10 +27,16 @@ from iructl.repository import (
     Repository,
     Script,
 )
+from iructl.repository.custom_app import SCRIPT_ATTRIBUTES
 
 APP_SCRIPT_CONTENT = "#!/bin/zsh\necho 'app script'\n"
 
 VALID_INFO_SUFFIXES = list(SUFFIX_MAP.keys())
+
+# Deterministic installer bytes shared by the integration tests, with their sha256.
+INSTALLER = b"installer-bytes-content"
+INSTALLER_SHA = hashlib.sha256(INSTALLER).hexdigest()
+INSTALLER_NAME = content_suffixed_filename("installer.pkg", INSTALLER_SHA)
 
 
 def _random_sha256() -> str:
@@ -287,94 +293,6 @@ def apps_repo_obj(apps_repo: Path) -> Repository[CustomApp]:
     return Repository.load_path(model=CustomApp, path=apps_repo)
 
 
-def _remote_copy(app: CustomApp) -> CustomApp:
-    return CustomApp(
-        info=AppInfoFile.model_validate(app.info.model_dump(exclude={"sync_hash"})),
-        audit=Script(content=app.audit.content) if app.audit else None,
-        preinstall=Script(content=app.preinstall.content) if app.preinstall else None,
-        postinstall=Script(content=app.postinstall.content) if app.postinstall else None,
-    )
-
-
-@pytest.fixture
-def apps_lrc(
-    iructl_repo: Path,
-    apps_repo_obj: Repository[CustomApp],
-    apps_remote: Repository[CustomApp],
-) -> tuple[Repository[CustomApp], Repository[CustomApp], ChangesDict[CustomApp]]:
-    """Prepare local and remote app repos with changes, plus on-disk installers.
-
-    Unlike scripts/profiles, an app create push uploads the installer, so each local app gets a
-    unique ``payloads/`` installer whose sha256 matches its info file.
-    """
-
-    local_repo = Repository(
-        (app for app in itertools.islice(apps_repo_obj.values(), 10)),
-        root=apps_repo_obj.root,
-    )
-    assert local_repo.root is not None
-
-    # Payloads resolve at the repo root, not the apps dir.
-    payload_dir = iructl_repo / "payloads"
-    payload_dir.mkdir(exist_ok=True)
-    for index, app in enumerate(local_repo.values()):
-        content = f"installer-{index}".encode()
-        name = f"installer-{index}.pkg"
-        (payload_dir / name).write_bytes(content)
-        app.info.file = AppFile(name=name, sha256=hashlib.sha256(content).hexdigest())
-        app.sync_hash = app.diff_hash
-        app.write()
-
-    for app in local_repo.values():
-        apps_remote[app.id] = _remote_copy(app)
-
-    app_ids = set(local_repo.keys())
-    changes: ChangesDict = {
-        ChangeType.NONE: [],
-        ChangeType.CREATE_REMOTE: [],
-        ChangeType.UPDATE_REMOTE: [],
-        ChangeType.CREATE_LOCAL: [],
-        ChangeType.UPDATE_LOCAL: [],
-        ChangeType.CONFLICT: [],
-    }
-
-    app_id = app_ids.pop()
-    del apps_remote[app_id]
-    changes[ChangeType.CREATE_LOCAL].append((local_repo[app_id], None))
-
-    app_id = app_ids.pop()
-    local_app = local_repo[app_id]
-    local_app.info.name = "New Local Name"
-    local_app.write()
-    changes[ChangeType.UPDATE_LOCAL].append((local_repo[app_id], apps_remote[app_id]))
-
-    app_id = app_ids.pop()
-    local_app = local_repo[app_id]
-    for script_path in (local_app.audit_path, local_app.preinstall_path, local_app.postinstall_path):
-        script_path.unlink(missing_ok=True)
-    local_app.info_path.unlink()
-    local_app.info_path.parent.rmdir()
-    if local_app.info.file:
-        (payload_dir / local_app.info.file.name).unlink(missing_ok=True)
-    del local_repo[app_id]
-    changes[ChangeType.CREATE_REMOTE].append((None, apps_remote[app_id]))
-
-    app_id = app_ids.pop()
-    apps_remote[app_id].info.active = not apps_remote[app_id].info.active
-    changes[ChangeType.UPDATE_REMOTE].append((local_repo[app_id], apps_remote[app_id]))
-
-    app_id = app_ids.pop()
-    local_app = local_repo[app_id]
-    local_app.info.name = "New Local Name"
-    local_app.write()
-    apps_remote[app_id].info.name = "New Remote Name"
-    changes[ChangeType.CONFLICT].append((local_repo[app_id], apps_remote[app_id]))
-
-    changes[ChangeType.NONE] += [(local_repo[app_id], apps_remote[app_id]) for app_id in app_ids]
-
-    return local_repo, apps_remote, changes
-
-
 def app_to_response(app: CustomApp) -> CustomAppPayload:
     """Build the API response payload for a CustomApp (test inverse of from_api_payload)."""
     data = app.info.model_dump(mode="json", exclude={"sync_hash", "file"})
@@ -468,3 +386,160 @@ def patch_apps_endpoints(monkeypatch, apps_remote: Repository[CustomApp]) -> dic
     monkeypatch.setattr("iructl.api.apps.CustomAppsResource.update", fake_update)
     monkeypatch.setattr("iructl.api.apps.CustomAppsResource.delete", fake_delete)
     return called
+
+
+def make_local_app(repo: Path, factory, *, name: str = "My App") -> CustomApp:
+    """Write a local custom-app member (no scripts) under <repo>/apps."""
+    member = factory(
+        name=name,
+        file_name=INSTALLER_NAME,
+        file_sha256=INSTALLER_SHA,
+        install_type=InstallType.PACKAGE,
+        install_enforcement=InstallEnforcement.INSTALL_ONCE,
+        has_audit=False,
+        has_preinstall=False,
+        has_postinstall=False,
+    )
+    member.ensure_paths(repo / "apps")
+    member.write()
+    return member
+
+
+def place_installer(repo: Path, content: bytes = INSTALLER, name: str = INSTALLER_NAME) -> Path:
+    """Write installer bytes into <repo>/payloads, creating the directory if needed."""
+    payloads = repo / "payloads"
+    payloads.mkdir(exist_ok=True)
+    target = payloads / name
+    target.write_bytes(content)
+    return target
+
+
+def compare_app_object(app1: CustomApp, app2: CustomApp, expected_diff: set[str]) -> None:
+    """Assert two custom apps differ exactly on the info fields named in expected_diff.
+
+    The three optional scripts (audit/preinstall/postinstall) are compared by content;
+    present-on-one-side-only counts as a difference for that attribute.
+    """
+    for k in set(app1.info.model_dump().keys()):
+        if k in expected_diff:
+            assert getattr(app1.info, k, None) != getattr(app2.info, k, None)
+        else:
+            assert getattr(app1.info, k, None) == getattr(app2.info, k, None)
+
+    for attribute in SCRIPT_ATTRIBUTES:
+        script1 = getattr(app1, attribute)
+        script2 = getattr(app2, attribute)
+        if script1 is None and script2 is None:
+            assert attribute not in expected_diff
+        elif script1 is None or script2 is None:
+            assert attribute in expected_diff
+        elif script1.content == script2.content:
+            assert attribute not in expected_diff
+        else:
+            assert attribute in expected_diff
+
+
+@pytest.fixture
+def stub_installer_download(monkeypatch):
+    """Patch the installer download to write INSTALLER bytes to its destination."""
+
+    def _download(self, url, dest, *, expected_sha, file_size=None, on_progress=lambda _: None):
+        dest.write_bytes(INSTALLER)
+
+    monkeypatch.setattr("iructl.api.client.S3Client.download_file", _download)
+
+
+@pytest.fixture
+def unchanged_app(iructl_repo_cd, custom_app_factory, apps_remote) -> CustomApp:
+    """A local app whose metadata matches Iru (ChangeType.NONE), with no local installer yet."""
+    member = make_local_app(iructl_repo_cd, custom_app_factory)
+    member.sync_hash = member.diff_hash
+    member.write()
+    apps_remote[member.id] = CustomApp.from_api_payload(app_to_response(member))
+    (iructl_repo_cd / "payloads").mkdir(exist_ok=True)
+    return member
+
+
+@pytest.fixture
+def apps_lrc(
+    apps_repo_obj: Repository[CustomApp],
+    apps_remote: Repository[CustomApp],
+) -> tuple[Repository[CustomApp], Repository[CustomApp], ChangesDict[CustomApp]]:
+    """Prepare local and remote repositories with one change in each ChangeType bucket.
+
+    Mirrors scripts_lrc with one deliberate divergence: it populates the shared apps_remote
+    fixture (which patch_apps_endpoints serves) instead of returning a private remote repo.
+    Only the CREATE_LOCAL app gets a seeded installer in payloads/ so its create-push uploads;
+    every other bucket is a metadata-only edit that leaves file.sha256 untouched and so never
+    trips an installer upload.
+    """
+    # limit local to 10 apps
+    local_repo = Repository(
+        (app for app in itertools.islice(apps_repo_obj.values(), 10)),
+        root=apps_repo_obj.root,
+    )
+    assert local_repo.root is not None
+    # set sync hash on apps in local repo so they start in sync
+    for app in local_repo.values():
+        app.sync_hash = app.diff_hash
+        app.write()
+
+    # populate the shared remote with independent copies of every local app
+    for app in local_repo.values():
+        apps_remote[app.id] = CustomApp.from_api_payload(app_to_response(app))
+
+    app_ids = set(local_repo.keys())
+    changes: ChangesDict = {
+        ChangeType.NONE: [],
+        ChangeType.CREATE_REMOTE: [],
+        ChangeType.UPDATE_REMOTE: [],
+        ChangeType.CREATE_LOCAL: [],
+        ChangeType.UPDATE_LOCAL: [],
+        ChangeType.CONFLICT: [],
+    }
+
+    # mock local create change: drop from remote and seed an installer whose sha matches.
+    app_id = app_ids.pop()
+    create_local_app = local_repo[app_id]
+    del apps_remote[app_id]
+    create_local_app.info.file.name = "installer.pkg"
+    create_local_app.info.file.sha256 = INSTALLER_SHA
+    create_local_app.write()
+    place_installer(local_repo.root.parent, name="installer.pkg")
+    changes[ChangeType.CREATE_LOCAL].append((create_local_app, None))
+
+    # mock local update change (metadata only)
+    app_id = app_ids.pop()
+    local_app = local_repo[app_id]
+    local_app.info.name = "New Local Name"
+    local_app.write()
+    changes[ChangeType.UPDATE_LOCAL].append((local_repo[app_id], apps_remote[app_id]))
+
+    # mock remote create change: remove the local member, keep it on the remote.
+    app_id = app_ids.pop()
+    member_dir = local_repo[app_id].info_path.parent
+    for child in member_dir.iterdir():
+        child.unlink()
+    member_dir.rmdir()
+    del local_repo[app_id]
+    changes[ChangeType.CREATE_REMOTE].append((None, apps_remote[app_id]))
+
+    # mock remote update change (metadata only)
+    app_id = app_ids.pop()
+    apps_remote[app_id].info.active = not apps_remote[app_id].info.active
+    changes[ChangeType.UPDATE_REMOTE].append((local_repo[app_id], apps_remote[app_id]))
+
+    # mock conflicting change (metadata changed on both sides)
+    app_id = app_ids.pop()
+    local_app = local_repo[app_id]
+    local_app.info.name = "New Local Name"
+    local_app.write()
+    apps_remote[app_id].info.name = "New Remote Name"
+    changes[ChangeType.CONFLICT].append((local_repo[app_id], apps_remote[app_id]))
+
+    # mock no changes
+    changes[ChangeType.NONE] += [(local_repo[app_id], apps_remote[app_id]) for app_id in app_ids]
+
+    # Invariant the suites rely on: the returned local repo round-trips through disk.
+    assert Repository.load_path(model=CustomApp, path=local_repo.root) == local_repo
+    return local_repo, apps_remote, changes

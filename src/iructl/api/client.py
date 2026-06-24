@@ -139,8 +139,8 @@ class HttpClient:
             requests.Response: The response object from the request
 
         Raises:
-            requests.ConnectionError: Raised when the API connection fails
             requests.HTTPError: Raised when the HTTP request returns an unsuccessful status code
+            requests.RequestException: Raised when the request fails at the transport layer
 
         """
 
@@ -167,15 +167,15 @@ class HttpClient:
             console.debug(f"Response content: {content}")
 
             response.raise_for_status()
-        except requests.ConnectionError as error:
-            console.error(f"Connection error occurred: {error}")
-            raise
         except requests.HTTPError as error:
             if anticipated_error is not None and anticipated_error(error.response):
                 console.debug(f"Anticipated HTTP {error.response.status_code} response: {error.response.text}")
             else:
                 console.error(f"HTTP error occurred: {error.response.status_code}")
                 console.error(f"Response content: {error.response.text}")
+            raise
+        except requests.RequestException as error:
+            console.error(f"Connection error occurred: {error}")
             raise
 
         return response

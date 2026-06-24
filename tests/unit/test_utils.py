@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,13 @@ class TestLocateRepoRoot:
     def test_raises_without_marker(self, tmp_path: Path):
         with pytest.raises(InvalidRepositoryError, match=rf"does not appear to be a {APP_BRANDING} repository"):
             locate_repo_root(cd_path=tmp_path)
+
+    def test_missing_marker_emits_no_log(self, tmp_path: Path, caplog):
+        # The locator only raises; callers that treat a missing repo as fatal surface the
+        # message themselves, so it must not log on its own.
+        with caplog.at_level(logging.DEBUG), pytest.raises(InvalidRepositoryError):
+            locate_repo_root(cd_path=tmp_path)
+        assert caplog.records == []
 
     def test_unmigrated_hint_uses_relative_mv_when_cwd_is_repo_root(self, tmp_path: Path, monkeypatch):
         root = tmp_path.resolve()

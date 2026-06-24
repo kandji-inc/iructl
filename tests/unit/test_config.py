@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Annotated
 
@@ -173,6 +174,14 @@ class TestLoadRepoConfig:
     def test_non_repo_path_is_empty_config(self, tmp_path: Path):
         # tmp_path is not inside any repository; loading must not hard-fail.
         assert load_repo_config(tmp_path) == IructlConfig()
+
+    def test_non_repo_path_emits_no_warning(self, tmp_path: Path, caplog):
+        # "Not a repository" is benign here, so config loading must stay silent: a stray
+        # warning/error log escapes to stderr before logging is configured.
+        with caplog.at_level(logging.DEBUG):
+            assert load_repo_config(tmp_path) == IructlConfig()
+        noisy = [record for record in caplog.records if record.levelno >= logging.WARNING]
+        assert not noisy, [record.getMessage() for record in noisy]
 
     @pytest.mark.parametrize(
         ("marker_content", "match"),

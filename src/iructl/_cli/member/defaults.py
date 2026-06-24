@@ -46,7 +46,7 @@ from iructl._console import OutputConsole, OutputFormat
 from iructl._constants import APP_NAME
 from iructl._diff import ChangeType
 from iructl.api import ApiConfig
-from iructl.exceptions import GitRepositoryError
+from iructl.exceptions import GitRepositoryError, InvalidRepositoryError
 from iructl.repository import InfoFormat, MemberBase, Repository
 from iructl.repository.custom_app import DownloadResult
 
@@ -70,6 +70,13 @@ def _abort_on_git_error(action: GitCommitStage) -> Generator[None]:
     """Turn a commit failure into a user-facing error and a Typer abort."""
     try:
         yield
+    except InvalidRepositoryError as error:
+        # Git is enabled but the target is not a git repository
+        console.print_error(
+            f"Cannot commit changes {action}: {error} "
+            f"Initialize a git repository ('git init') or re-run with '--no-git' to skip git interactions."
+        )
+        raise typer.Abort
     except GitRepositoryError as error:
         console.print_error(f"Failed to commit changes to the local repository {action}: {error}")
         raise typer.Abort
