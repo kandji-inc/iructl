@@ -1,10 +1,10 @@
-class Iructl < Formula
+class IructlAT130 < Formula
   include Language::Python::Virtualenv
 
   desc "Local management of Iru custom resources"
   homepage "https://github.com/kandji-inc/iructl"
-  url "https://files.pythonhosted.org/packages/30/b1/512deded3d9b571338d6a51c6b7b3824dfbd8f084324c2422e568c2d289e/iructl-1.3.1.tar.gz"
-  sha256 "4e46c706816ae528cbb8f0a635d8e42e742119463b54c413e485f683f2d338d9"
+  url "https://files.pythonhosted.org/packages/2d/ce/f1afd5ac74945ac00b475ab75ad67aa2f678eb9affd469181e3481b31a61/iructl-1.3.0.tar.gz"
+  sha256 "130078a7b62448a427c9d0109c4a71f064b3711f5b6ba6b340938d52f4b1fbfb"
   license "MIT"
   head "https://github.com/kandji-inc/iructl.git", branch: "main"
 

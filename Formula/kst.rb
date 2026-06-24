@@ -6,6 +6,7 @@ class Kst < Formula
   url "https://files.pythonhosted.org/packages/59/e3/ff08e26cacd88d6507a6dc0e50a33ec1f665ab46e430200fbc791b2c5dbe/kst-1.3.0.tar.gz"
   sha256 "55d6b9ad86d10103df6c1fb0a1d9a3c1f0d47938ebc582ac3aa70a4ab399aef1"
   license "MIT"
+  revision 1
   head "https://github.com/kandji-inc/kst.git", branch: "main"
 
   depends_on "rust" => :build # for pydantic-core
@@ -37,8 +38,8 @@ class Kst < Formula
   end
 
   resource "iructl" do
-    url "https://files.pythonhosted.org/packages/2d/ce/f1afd5ac74945ac00b475ab75ad67aa2f678eb9affd469181e3481b31a61/iructl-1.3.0.tar.gz"
-    sha256 "130078a7b62448a427c9d0109c4a71f064b3711f5b6ba6b340938d52f4b1fbfb"
+    url "https://files.pythonhosted.org/packages/30/b1/512deded3d9b571338d6a51c6b7b3824dfbd8f084324c2422e568c2d289e/iructl-1.3.1.tar.gz"
+    sha256 "4e46c706816ae528cbb8f0a635d8e42e742119463b54c413e485f683f2d338d9"
   end
 
   resource "markdown-it-py" do
