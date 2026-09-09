@@ -39,10 +39,10 @@ jobs:
       IRUCTL_REPORT: "/home/runner/.local/state/iructl/log/iructl_report.json"
     steps:
       - name: Clone Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -136,7 +136,7 @@ jobs:
 
       - name: Send Profiles Result Slack Notification
         if: ${{ steps.profiles-report.outputs.summary != '""' }}
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@v3.0.3
         with:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook
@@ -209,7 +209,7 @@ jobs:
 
       - name: Send Scripts Result Slack Notification
         if: ${{ steps.scripts-report.outputs.summary != '""' }}
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@v3.0.3
         with:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook
@@ -253,7 +253,7 @@ jobs:
 
       - name: Send Slack Notification on Job Failure
         if: ${{ failure() }}
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@v3.0.3
         with:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook

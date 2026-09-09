@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Repository Dispatch
-        uses: peter-evans/repository-dispatch@7dae662b47efccf275f551a5df539bd020d3eb5b # v3.0.0
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.INTERNAL_REPO_TOKEN }}
           repository: ${{ secrets.INTERNAL_REPO }}

@@ -52,6 +52,9 @@ class TestApiConfig:
             "https://xxxxxxxx.api.iru.com",
             "http://xxxxxxxx.api.iru.com",
             "xxxxxxxx.api.iru.com",
+            "https://xxxxxxxx.api.eu.iru.com",
+            "http://xxxxxxxx.api.eu.iru.com",
+            "xxxxxxxx.api.eu.iru.com",
         ]
         for tenant_url in valid_configs:
             config = ApiConfig(tenant_url=tenant_url, api_token="00000000-0000-0000-0000-000000000000")
@@ -64,7 +67,6 @@ class TestApiConfig:
             "https://xxxxxxxx.api.kandji.io:8080",  # Port numbers are not allowed
             "http://xxxxxxxx.kandji.io",  # Invalid netloc
             "https://invalid-url.com",  # Invalid netloc
-            "https://xxxxxxxx.api.eu.iru.com",  # No EU subdomain on iru
             "https://xxxxxxxx.iru.com",  # Missing api. subdomain
             "https://xxxxxxxx.api.iru.net",  # Unsupported TLD
         ]

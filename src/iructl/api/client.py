@@ -28,7 +28,7 @@ class ApiConfig(BaseModel):
 
     Attributes:
         url (str): API base URL for the tenant (Kandji: https://<subdomain>.api.kandji.io or .api.eu.kandji.io;
-            Iru: https://<subdomain>.api.iru.com). Must use the https:// schema.
+            Iru: https://<subdomain>.api.iru.com or .api.eu.iru.com). Must use the https:// schema.
         api_token (str): API authentication token for the tenant.
 
     """
@@ -56,11 +56,11 @@ class ApiConfig(BaseModel):
 
         v = v.rstrip("/")  # Normalize without trailing slash
 
-        if not re.fullmatch(r"https://[A-Za-z0-9-]+\.api((\.eu)?\.kandji\.io|\.iru\.com)", v):
+        if not re.fullmatch(r"https://[A-Za-z0-9-]+\.api\.((eu\.)?(kandji\.io|iru\.com))", v):
             raise ValueError(
                 "The Tenant URL must be a valid Kandji or Iru API URL. "
                 "Use https://<tenant>.api.kandji.io, https://<tenant>.api.eu.kandji.io, "
-                "or https://<tenant>.api.iru.com."
+                "https://<tenant>.api.iru.com, or https://<tenant>.api.eu.iru.com."
             )
         return v
 
