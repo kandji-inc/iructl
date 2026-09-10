@@ -29,7 +29,7 @@ on:
         required: false
 jobs:
   push-to-kandji:
-    runs-on: ubuntu-latest
+    runs-on: arc-scale-set-sddx-small
     defaults:
       run:
         shell: bash
