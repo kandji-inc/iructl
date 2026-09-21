@@ -428,6 +428,23 @@ class TestResolveBinary:
 class TestPushRemotePayload:
     """push_remote forwards each script's content and the resolved binary to the resource."""
 
+    def test_strips_trailing_newlines_before_upload(self, custom_app_factory, config):
+        app = custom_app_factory(has_audit=True, has_preinstall=True, has_postinstall=True)
+        app.audit.content = "#!/bin/zsh\necho audit\r\n\n"
+        app.preinstall.content = "#!/bin/zsh\necho preinstall\n\r"
+        app.postinstall.content = "#!/bin/zsh\necho postinstall\n"
+        original_hash = app.diff_hash
+
+        payload = app._update_payload(config)
+
+        assert payload["audit_script"] == "#!/bin/zsh\necho audit"
+        assert payload["preinstall_script"] == "#!/bin/zsh\necho preinstall"
+        assert payload["postinstall_script"] == "#!/bin/zsh\necho postinstall"
+        app.audit.content = payload["audit_script"]
+        app.preinstall.content = payload["preinstall_script"]
+        app.postinstall.content = payload["postinstall_script"]
+        assert app.diff_hash == original_hash
+
     def test_create_sends_scripts_and_resolved_binary(self, custom_app_factory, config, monkeypatch, tmp_path):
         """create passes the three script contents and the resolved binary path as file."""
         content = b"installer-bytes"
@@ -452,9 +469,9 @@ class TestPushRemotePayload:
 
         app.push_remote(config, create=True, payload_dir=tmp_path)
 
-        assert captured_kwargs["audit_script"] == app.audit.content
-        assert captured_kwargs["preinstall_script"] == app.preinstall.content
-        assert captured_kwargs["postinstall_script"] == app.postinstall.content
+        assert captured_kwargs["audit_script"] == app.audit.content.rstrip("\r\n")
+        assert captured_kwargs["preinstall_script"] == app.preinstall.content.rstrip("\r\n")
+        assert captured_kwargs["postinstall_script"] == app.postinstall.content.rstrip("\r\n")
         assert captured_kwargs["file"] == binary_path
 
     def test_update_without_payload_dir_omits_file(self, custom_app_factory, config, monkeypatch):

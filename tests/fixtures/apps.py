@@ -433,7 +433,7 @@ def compare_app_object(app1: CustomApp, app2: CustomApp, expected_diff: set[str]
             assert attribute not in expected_diff
         elif script1 is None or script2 is None:
             assert attribute in expected_diff
-        elif script1.content == script2.content:
+        elif script1.content.rstrip("\r\n") == script2.content.rstrip("\r\n"):
             assert attribute not in expected_diff
         else:
             assert attribute in expected_diff

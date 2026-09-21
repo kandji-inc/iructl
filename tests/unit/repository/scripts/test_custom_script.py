@@ -266,6 +266,20 @@ class TestUpdateRemoteRemediationScript:
     layer) — not "" which would actively clear remote remediation.
     """
 
+    def test_strips_trailing_newlines_before_upload(self, config, custom_script_factory):
+        script = custom_script_factory(has_remediation=True)
+        script.audit.content = "#!/bin/sh\necho audit\r\n\n"
+        script.remediation.content = "#!/bin/sh\necho remediate\n\r"
+        original_hash = script.diff_hash
+
+        payload = script._update_payload(config)
+
+        assert payload["script"] == "#!/bin/sh\necho audit"
+        assert payload["remediation_script"] == "#!/bin/sh\necho remediate"
+        script.audit.content = payload["script"]
+        script.remediation.content = payload["remediation_script"]
+        assert script.diff_hash == original_hash
+
     def test_without_remediation_does_not_send_empty_string(
         self, monkeypatch, config, custom_script_factory, script_info_data_factory
     ):
