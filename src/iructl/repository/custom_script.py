@@ -83,8 +83,8 @@ class CustomScript(MemberBase[ScriptInfoFile, CustomScriptPayload]):
         """Build the create/update keyword arguments for the custom script resource."""
         payload: dict[str, Any] = {
             "name": self.name,
-            "script": self.audit.content,
-            "remediation_script": None if self.remediation is None else self.remediation.content,
+            "script": self.audit.normalized_content,
+            "remediation_script": None if self.remediation is None else self.remediation.normalized_content,
             "active": self.info.active,
             "execution_frequency": self.info.execution_frequency,
             "restart": self.info.restart,

@@ -153,6 +153,15 @@ echo "Hello, World!"
 exit 0
 """
 
+    @property
+    def normalized_content(self) -> str:
+        return self.content.rstrip("\r\n")  # Match Iru's stored representation.
+
+    @property
+    @override
+    def diff_hash(self) -> str:
+        return hashlib.sha256(self.normalized_content.encode("utf-8")).hexdigest()
+
     @override
     def write(self):
         if self.path is None:
