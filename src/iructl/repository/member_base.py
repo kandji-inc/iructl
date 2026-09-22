@@ -335,7 +335,11 @@ class MemberBase[InfoType: InfoFile, PayloadType: ApiPayload](BaseModel, ABC):
         children: dict[str, File | None] = {}
         for spec in cls._config.content_specs:
             content = getattr(payload, spec.payload_field)
-            children[spec.attribute] = spec.content_cls(content=content) if spec.required or content != "" else None
+            children[spec.attribute] = (
+                spec.content_cls(content=spec.content_cls.from_api_content(content))
+                if spec.required or content != ""
+                else None
+            )
         return cls(info=info_file, **children)
 
     @classmethod
