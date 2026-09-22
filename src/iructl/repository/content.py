@@ -154,13 +154,10 @@ exit 0
 """
 
     @property
-    def normalized_content(self) -> str:
-        return self.content.rstrip("\r\n")  # Match Iru's stored representation.
-
-    @property
     @override
     def diff_hash(self) -> str:
-        return hashlib.sha256(self.normalized_content.encode("utf-8")).hexdigest()
+        # Iru strips leading/trailing whitespace server-side, regardless of what is sent.
+        return hashlib.sha256(self.content.strip().encode("utf-8")).hexdigest()
 
     @override
     def write(self):

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from iructl.exceptions import InvalidProfileError
-from iructl.repository import File, Mobileconfig
+from iructl.repository import File, Mobileconfig, Script
 
 
 @pytest.fixture
@@ -55,6 +55,20 @@ class TestFile:
         # Hash should be reverted when the value is set back to the original
         mobileconfig_obj.content = original_content
         assert mobileconfig_obj.diff_hash == original_hash
+
+
+class TestScript:
+    @pytest.mark.parametrize(
+        ("content", "expected_equal"),
+        [
+            pytest.param("  \n#!/bin/sh\necho hello\r\n\n  ", True, id="surrounding-whitespace"),
+            pytest.param("#!/bin/sh\necho different", False, id="different-content"),
+        ],
+    )
+    def test_diff_hash_ignores_surrounding_whitespace(self, content, expected_equal):
+        """diff_hash ignores leading/trailing whitespace, since the API strips it, but not a real content change."""
+        original_hash = Script(content="#!/bin/sh\necho hello").diff_hash
+        assert (Script(content=content).diff_hash == original_hash) == expected_equal
 
 
 class TestMobileconfig:
