@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self, cast, get_args, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 from rich.console import RenderableType
@@ -40,6 +40,16 @@ def _strip_nones(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_nones(item) for item in value]
     return value
+
+
+@runtime_checkable
+class _DiffableModel(Protocol):
+    """A pydantic model with a diff_hash property (File or InfoFile)."""
+
+    @property
+    def diff_hash(self) -> str: ...
+
+    def model_copy(self) -> Self: ...
 
 
 class _MemberApiResource(ResourceBase, Protocol):
@@ -208,7 +218,15 @@ class MemberBase[InfoType: InfoFile, PayloadType: ApiPayload](BaseModel, ABC):
         for field in type(self).model_fields.keys():
             self_value = getattr(self, field)
             other_value = getattr(other, field)
-            if isinstance(self_value, BaseModel) and isinstance(other_value, BaseModel):
+            if (
+                field != "info"
+                and isinstance(self_value, _DiffableModel)
+                and isinstance(other_value, _DiffableModel)
+                and self_value.diff_hash == other_value.diff_hash
+            ):
+                # Equivalent content according to diff_hash; keep the local copy.
+                update_map[field] = self_value.model_copy()
+            elif isinstance(self_value, BaseModel) and isinstance(other_value, BaseModel):
                 # A remote member has no local-only fields set; exclude them so the merge
                 # cannot wipe locally-held values with None.
                 merged = self_value.model_copy(update=other_value.model_dump(exclude=set(InfoFile.LOCAL_ONLY)))

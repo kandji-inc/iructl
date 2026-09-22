@@ -1,7 +1,7 @@
 import pytest
 from rich.table import Table
 
-from tests.fixtures.apps import app_info_data_factory
+from tests.fixtures.apps import app_info_data_factory, custom_app_factory
 from tests.fixtures.profiles import (
     custom_profile_factory,
     custom_profile_obj,
@@ -9,7 +9,7 @@ from tests.fixtures.profiles import (
     mobileconfig_data_factory,
     profile_info_data_factory,
 )
-from tests.fixtures.scripts import script_info_data_factory
+from tests.fixtures.scripts import custom_script_factory, script_content, script_info_data_factory
 
 
 @pytest.fixture
