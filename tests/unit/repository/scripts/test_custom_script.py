@@ -179,10 +179,10 @@ class TestCustomScript:
         script_response = CustomScriptPayload.model_validate(response_data)
         script = CustomScript.from_api_payload(script_response)
         assert isinstance(script, CustomScript)
-        assert script.audit.content == script_content
+        assert script.audit.content == f"{script_content}\n"
         if has_remediation:
             assert script.remediation is not None
-            assert script.remediation.content == script_content
+            assert script.remediation.content == f"{script_content}\n"
         else:
             assert script.remediation is None
 

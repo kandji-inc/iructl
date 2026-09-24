@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from iructl.exceptions import InvalidProfileError
-from iructl.repository import File, Mobileconfig
+from iructl.repository import File, Mobileconfig, Script
 
 
 @pytest.fixture
@@ -55,6 +55,39 @@ class TestFile:
         # Hash should be reverted when the value is set back to the original
         mobileconfig_obj.content = original_content
         assert mobileconfig_obj.diff_hash == original_hash
+
+    def test_from_api_content_is_identity(self):
+        """The base File does not alter content pulled from the API."""
+        assert File.from_api_content("  raw\r\n") == "  raw\r\n"
+
+
+class TestScript:
+    @pytest.mark.parametrize(
+        ("content", "expected_equal"),
+        [
+            pytest.param("  \n#!/bin/sh\necho hello\r\n\n  ", True, id="surrounding-whitespace"),
+            pytest.param("#!/bin/sh\necho different", False, id="different-content"),
+        ],
+    )
+    def test_diff_hash_ignores_surrounding_whitespace(self, content, expected_equal):
+        """diff_hash ignores leading/trailing whitespace, since the API strips it, but not a real content change."""
+        original_hash = Script(content="#!/bin/sh\necho hello").diff_hash
+        assert (Script(content=content).diff_hash == original_hash) == expected_equal
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            pytest.param("line\n", "line\n", id="already-normalized"),
+            pytest.param("line", "line\n", id="no-trailing-newline"),
+            pytest.param("\nline\r\n\n", "line\n", id="leading-and-trailing-whitespace"),
+            pytest.param("  line  ", "line\n", id="leading-and-trailing-spaces"),
+            pytest.param("", "", id="empty-stays-empty"),
+            pytest.param("   \n\n  ", "", id="whitespace-only-becomes-empty"),
+        ],
+    )
+    def test_from_api_content_normalizes_to_single_trailing_newline(self, raw, expected):
+        """Content pulled from the API is normalized; local disk loads are untouched (see File.load)."""
+        assert Script.from_api_content(raw) == expected
 
 
 class TestMobileconfig:

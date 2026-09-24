@@ -23,17 +23,17 @@ def compare_script_object(script1, script2, expected_diff):
             assert getattr(script1.info, k, None) == getattr(script2.info, k, None)
 
     if "audit" not in expected_diff:
-        assert script1.audit.content == script2.audit.content
+        assert script1.audit.diff_hash == script2.audit.diff_hash
     else:
-        assert script1.audit.content != script2.audit.content
+        assert script1.audit.diff_hash != script2.audit.diff_hash
 
     if script1.remediation is None and script2.remediation is None:
         assert "remediation" not in expected_diff
     elif script1.remediation is None or script2.remediation is None:
         assert "remediation" in expected_diff
-    elif script1.remediation.content == script2.remediation.content:
+    elif script1.remediation.diff_hash == script2.remediation.diff_hash:
         assert "remediation" not in expected_diff
-    elif script1.remediation.content != script2.remediation.content:
+    elif script1.remediation.diff_hash != script2.remediation.diff_hash:
         assert "remediation" in expected_diff
     else:
         raise pytest.fail("Remediation script comparison got unexpected input.")
@@ -242,7 +242,7 @@ def test_add_remediation_script(scripts_lrc):
     assert result.exit_code == 0
     updated_local_script = CustomScript.from_path(local_script_path)
     assert updated_local_script.remediation is not None
-    assert updated_local_script.remediation.content == "echo 'Hello World!'"
+    assert updated_local_script.remediation.content == "echo 'Hello World!'\n"
 
 
 @pytest.mark.usefixtures("patch_scripts_endpoints", "iructl_repo_cd")

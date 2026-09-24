@@ -258,7 +258,7 @@ class TestCustomApp:
         assert app.info.file.sha256 == payload.sha256
         assert app.audit is None
         assert app.preinstall is not None
-        assert app.preinstall.content == "echo pre"
+        assert app.preinstall.content == "echo pre\n"
         assert app.postinstall is None
 
     def test_from_api_payload_strips_upload_token(self, app_info_file_obj):
@@ -278,7 +278,7 @@ class TestCustomApp:
         )
         app = CustomApp.from_api_payload(payload)
         assert app.audit is not None
-        assert app.audit.content == "echo audit"
+        assert app.audit.content == "echo audit\n"
 
     @pytest.mark.parametrize("install_type", [InstallType.PACKAGE, InstallType.IMAGE])
     def test_from_api_payload_blank_unzip_location(self, app_info_data_factory, install_type):

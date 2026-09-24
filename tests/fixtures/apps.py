@@ -417,7 +417,7 @@ def place_installer(repo: Path, content: bytes = INSTALLER, name: str = INSTALLE
 def compare_app_object(app1: CustomApp, app2: CustomApp, expected_diff: set[str]) -> None:
     """Assert two custom apps differ exactly on the info fields named in expected_diff.
 
-    The three optional scripts (audit/preinstall/postinstall) are compared by content;
+    The three optional scripts (audit/preinstall/postinstall) are compared by diff_hash;
     present-on-one-side-only counts as a difference for that attribute.
     """
     for k in set(app1.info.model_dump().keys()):
@@ -433,7 +433,7 @@ def compare_app_object(app1: CustomApp, app2: CustomApp, expected_diff: set[str]
             assert attribute not in expected_diff
         elif script1 is None or script2 is None:
             assert attribute in expected_diff
-        elif script1.content == script2.content:
+        elif script1.diff_hash == script2.diff_hash:
             assert attribute not in expected_diff
         else:
             assert attribute in expected_diff

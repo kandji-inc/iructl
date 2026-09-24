@@ -48,6 +48,11 @@ class File(BaseModel, ABC):
     def load(cls, path: Path) -> Self:
         return cls(content=path.read_text(encoding="utf-8"), path=path)
 
+    @classmethod
+    def from_api_content(cls, content: str) -> str:
+        """Adjust content pulled from the API before construction. Override to normalize a stored format."""
+        return content
+
     def write(self):
         if self.path is None:
             raise ValueError("Cannot write without a path set.")
@@ -152,6 +157,19 @@ class Script(File):
 echo "Hello, World!"
 exit 0
 """
+
+    @property
+    @override
+    def diff_hash(self) -> str:
+        # Iru strips leading/trailing whitespace server-side, regardless of what is sent.
+        return hashlib.sha256(self.content.strip().encode("utf-8")).hexdigest()
+
+    @classmethod
+    @override
+    def from_api_content(cls, content: str) -> str:
+        """Normalize to a single trailing newline, so scripts pulled from Iru have a consistent local format."""
+        stripped = content.strip()
+        return f"{stripped}\n" if stripped else stripped
 
     @override
     def write(self):
